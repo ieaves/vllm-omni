@@ -180,6 +180,12 @@ def parse_args() -> argparse.Namespace:
         choices=["fp8", "gguf"],
         help="Quantization method for the transformer (fp8 for online FP8 quantization).",
     )
+    parser.add_argument(
+        "--revision",
+        type=str,
+        default=None,
+        help="Specific version of files to download from the repository. Default: None.",
+    )
     return parser.parse_args()
 
 
@@ -243,6 +249,8 @@ def main():
         omni_kwargs["cache_backend"] = args.cache_backend
         omni_kwargs["cache_config"] = cache_config
         omni_kwargs["enable_cache_dit_summary"] = args.enable_cache_dit_summary
+    if args.revision is not None:
+        omni_kwargs["revision"] = args.revision
 
     omni = Omni(**omni_kwargs)
 
