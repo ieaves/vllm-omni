@@ -125,6 +125,15 @@ from vllm_omni.utils.audio import audio_chunk_pcm_bytes, audio_chunk_sample_rate
 logger = init_logger(__name__)
 
 
+def _mm_prompt_token_counts(mm_placeholders) -> dict[str, int]:
+    """Per-modality placeholder-token counts already included in prompt_tokens."""
+    return {
+        modality: sum(p.length for p in ranges)
+        for modality, ranges in (mm_placeholders or {}).items()
+        if ranges
+    }
+
+
 async def _identity_async(value: Any) -> Any:
     return value
 
@@ -1204,6 +1213,7 @@ class OmniOpenAIServingChat(OpenAIServingChat, AudioMixin):
         stop_reason_emitted: list[bool] = [False] * num_choices
         num_prompt_tokens = 0
         num_cached_tokens = None
+        mm_token_counts: dict[str, int] = {}
         if self.use_harmony:
             harmony_parsers = [get_streamable_parser_for_assistant() for _ in range(num_choices)]
             harmony_tools_streamed = [False] * num_choices
@@ -1300,6 +1310,7 @@ class OmniOpenAIServingChat(OpenAIServingChat, AudioMixin):
                             num_prompt_tokens += len(res.encoder_prompt_token_ids)
 
                     num_cached_tokens = res.num_cached_tokens
+                    mm_token_counts = _mm_prompt_token_counts(getattr(res, "multi_modal_placeholders", None))
                     # Send first response for each choice with role
                     # NOTE: num_choices defaults to 1 so this usually executes once per request
                     for i in range(num_choices):
@@ -2020,8 +2031,11 @@ class OmniOpenAIServingChat(OpenAIServingChat, AudioMixin):
                     completion_tokens=completion_tokens,
                     total_tokens=num_prompt_tokens + completion_tokens,
                 )
-                if self.enable_prompt_tokens_details and num_cached_tokens:
-                    final_usage.prompt_tokens_details = PromptTokenUsageInfo(cached_tokens=num_cached_tokens)
+                if self.enable_prompt_tokens_details and (num_cached_tokens or mm_token_counts):
+                    final_usage.prompt_tokens_details = PromptTokenUsageInfo(
+                        cached_tokens=num_cached_tokens,
+                        multimodal_tokens=mm_token_counts or None,
+                    )
 
                 final_usage_chunk = OmniChatCompletionStreamResponse(
                     id=request_id,
@@ -2482,8 +2496,12 @@ class OmniOpenAIServingChat(OpenAIServingChat, AudioMixin):
             completion_tokens=num_generated_tokens,
             total_tokens=num_prompt_tokens + num_generated_tokens,
         )
-        if self.enable_prompt_tokens_details and final_res.num_cached_tokens:
-            usage.prompt_tokens_details = PromptTokenUsageInfo(cached_tokens=final_res.num_cached_tokens)
+        mm_token_counts = _mm_prompt_token_counts(getattr(final_res, "multi_modal_placeholders", None))
+        if self.enable_prompt_tokens_details and (final_res.num_cached_tokens or mm_token_counts):
+            usage.prompt_tokens_details = PromptTokenUsageInfo(
+                cached_tokens=final_res.num_cached_tokens,
+                multimodal_tokens=mm_token_counts or None,
+            )
 
         prompt_logprobs = clamp_prompt_logprobs(final_res.prompt_logprobs)
         prompt_token_ids = final_res.prompt_token_ids if request.return_token_ids else None
