@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM-Omni project
 
 import dataclasses
 import types
 
 import pytest
 
-from vllm_omni.engine import async_omni_engine as async_omni_engine_module
-from vllm_omni.engine.async_omni_engine import (
+from vllm_omni.engine import omni_engine_base as omni_engine_base_module
+from vllm_omni.engine.omni_engine_base import (
     _MODEL_CAPABILITY_TASKS,
     _CapabilityTask,
     _derive_supported_tasks,
@@ -62,7 +62,7 @@ def test_audio_output_stage_yields_speech():
 
 def test_transcription_capable_comprehension_stage_yields_transcription(monkeypatch):
     rule = _transcription_rule_with_probe(lambda _architectures, _model_config: True)
-    monkeypatch.setattr(async_omni_engine_module, "_MODEL_CAPABILITY_TASKS", (rule,))
+    monkeypatch.setattr(omni_engine_base_module, "_MODEL_CAPABILITY_TASKS", (rule,))
     tasks = _derive_supported_tasks(
         [
             _pool(is_comprehension=True, vllm_config=_vllm_config()),
@@ -76,14 +76,14 @@ def test_transcription_requires_an_eligible_stage(monkeypatch):
     # Transcription declares comprehension stages eligible; an audio-only
     # pipeline never advertises it, however capable its model claims to be.
     rule = _transcription_rule_with_probe(lambda _architectures, _model_config: True)
-    monkeypatch.setattr(async_omni_engine_module, "_MODEL_CAPABILITY_TASKS", (rule,))
+    monkeypatch.setattr(omni_engine_base_module, "_MODEL_CAPABILITY_TASKS", (rule,))
     tasks = _derive_supported_tasks([_pool(final_output_type="audio", vllm_config=_vllm_config())])
     assert "transcription" not in tasks
 
 
 def test_transcription_absent_when_model_lacks_support(monkeypatch):
     rule = _transcription_rule_with_probe(lambda _architectures, _model_config: False)
-    monkeypatch.setattr(async_omni_engine_module, "_MODEL_CAPABILITY_TASKS", (rule,))
+    monkeypatch.setattr(omni_engine_base_module, "_MODEL_CAPABILITY_TASKS", (rule,))
     tasks = _derive_supported_tasks(
         [
             _pool(is_comprehension=True, vllm_config=_vllm_config()),
@@ -95,7 +95,7 @@ def test_transcription_absent_when_model_lacks_support(monkeypatch):
 
 def test_capability_table_drives_derivation(monkeypatch):
     monkeypatch.setattr(
-        async_omni_engine_module,
+        omni_engine_base_module,
         "_MODEL_CAPABILITY_TASKS",
         (
             _CapabilityTask(
@@ -124,7 +124,7 @@ def test_eligibility_is_per_entry(monkeypatch):
         return True
 
     monkeypatch.setattr(
-        async_omni_engine_module,
+        omni_engine_base_module,
         "_MODEL_CAPABILITY_TASKS",
         (_CapabilityTask(task="hypothetical", probe=probe, eligible=_is_audio_output_stage),),
     )
